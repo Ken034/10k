@@ -16,23 +16,11 @@ services:
         value: production
       - key: PREFETCH_ENABLED
         value: false
-      # Add your Qwen API key in Render dashboard:
-      # - key: QWEN_API_KEY
-      #   sync: false    (Render will prompt you to enter it)
-      # - key: QWEN_BASE_URL
-      #   value: https://ws-0exjku32k70c5ir6.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1
-      # - key: QWEN_MODEL
-      #   value: qwen3.7-plus
 
-  # Frontend — React static site
-  - type: web
-    name: sec-analyst-frontend
-    runtime: static
-    plan: free
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
-    envVars:
-      - key: VITE_API_BASE
-        value: https://sec-analyst-api.onrender.com
-      - key: VITE_GA_ID
-        value: G-45EEYCC4CC
+# Frontend deployed separately as a static site (not via Blueprint)
+# See deployment instructions — create it manually on Render dashboard:
+#   Type: Static Site
+#   Build Command: cd frontend && npm install && npm run build
+#   Publish Path: frontend/dist
+#   Env: VITE_API_BASE = https://sec-analyst-api.onrender.com
+#   Env: VITE_GA_ID = G-45EEYCC4CC
