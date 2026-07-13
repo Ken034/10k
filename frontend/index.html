@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SEC Financial Analyst</title>
+    <!-- Google Analytics (injected at build time via VITE_GA_ID) -->
+    <script>
+      (function() {
+        var gaId = '%VITE_GA_ID%';
+        if (gaId && gaId !== '%' + 'VITE_GA_ID' + '%') {
+          var s1 = document.createElement('script');
+          s1.async = true;
+          s1.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+          document.head.appendChild(s1);
+          var s2 = document.createElement('script');
+          s2.textContent = 'window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag("js",new Date());gtag("config","' + gaId + '");';
+          document.head.appendChild(s2);
+        }
+      })();
+    </script>
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
