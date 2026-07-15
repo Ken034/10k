@@ -9,12 +9,19 @@ export default function SearchBar({ onSearch, loading }) {
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const debounceRef = useRef(null)
   const dropdownRef = useRef(null)
+  const justSelectedRef = useRef(false)
 
   // Debounced search
   useEffect(() => {
     if (!query.trim() || query.trim().length < 2) {
       setResults([])
       setShowDropdown(false)
+      return
+    }
+
+    // Skip search if user just selected a result (to avoid re-showing dropdown)
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false
       return
     }
 
@@ -51,6 +58,9 @@ export default function SearchBar({ onSearch, loading }) {
     e.preventDefault()
     if (selectedIndex >= 0 && results[selectedIndex]) {
       selectResult(results[selectedIndex])
+    } else if (results.length > 0) {
+      // If user typed a name and pressed Enter, select the first result
+      selectResult(results[0])
     } else if (query.trim()) {
       // If user typed a ticker directly (e.g., AAPL), use it
       onSearch(query.trim().toUpperCase())
@@ -59,7 +69,9 @@ export default function SearchBar({ onSearch, loading }) {
   }
 
   const selectResult = (result) => {
+    justSelectedRef.current = true
     setQuery(result.ticker)
+    setResults([])
     setShowDropdown(false)
     onSearch(result.ticker)
   }
@@ -88,7 +100,7 @@ export default function SearchBar({ onSearch, loading }) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => results.length > 0 && setShowDropdown(true)}
-            placeholder="Search company name or ticker (e.g. Apple, AAPL)..."
+            placeholder="Search US, HK, or China stocks (e.g. AAPL, 0700.HK, 600519)..."
             className="w-full bg-slate-900 border border-slate-700 rounded-2xl py-4 pl-6 pr-16 text-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-xl"
           />
           <button
@@ -115,10 +127,15 @@ export default function SearchBar({ onSearch, loading }) {
                   : 'hover:bg-slate-800'
               }`}
             >
-              <span className="font-mono text-blue-400 font-semibold w-20">
+              <span className="font-mono text-blue-400 font-semibold w-24">
                 {result.ticker}
               </span>
               <span className="text-slate-300 truncate">{result.name}</span>
+              {result.exchange && (
+                <span className="text-xs px-2 py-0.5 bg-amber-600/30 text-amber-400 rounded">
+                  {result.exchange}
+                </span>
+              )}
             </button>
           ))}
         </div>

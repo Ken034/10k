@@ -68,3 +68,17 @@ class PrefetchQueue(Base):
     last_run = Column(DateTime(timezone=True))
     error = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AsianStockCache(Base):
+    __tablename__ = "asian_stock_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String(20), unique=True, nullable=False, index=True)
+    name = Column(String(500))
+    exchange = Column(String(50))
+    currency = Column(String(10))
+    market_cap = Column(Float)
+    financial_data = Column(Text)  # JSON string of financial table
+    cached_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

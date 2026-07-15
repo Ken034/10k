@@ -1,5 +1,6 @@
 import asyncio
 from app.database import init_db
+from app.models import db_models  # noqa: F401 - ensure models are registered
 
 
 async def main():

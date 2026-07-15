@@ -3,6 +3,7 @@
 *.db
 *.db-shm
 *.db-wal
+backend/china_cache/
 __pycache__/
 *.py[cod]
 *$py.class

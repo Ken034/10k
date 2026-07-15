@@ -5,12 +5,19 @@ import SearchBar from '../components/SearchBar'
 import FinancialTable from '../components/FinancialTable'
 import { fetchCompany } from '../services/api'
 
-function formatMarketCap(val) {
+function formatMarketCap(val, currency = 'USD') {
   if (!val) return ''
-  if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`
-  if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`
-  if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`
-  return `$${val.toLocaleString()}`
+  const symbol = currency === 'HKD' ? 'HK$' : currency === 'CNY' ? 'RMB ' : '$'
+  if (val >= 1e12) return `${symbol}${(val / 1e12).toFixed(2)}T`
+  if (val >= 1e9) return `${symbol}${(val / 1e9).toFixed(2)}B`
+  if (val >= 1e6) return `${symbol}${(val / 1e6).toFixed(2)}M`
+  return `${symbol}${val.toLocaleString()}`
+}
+
+function getCurrencyLabel(currency) {
+  if (currency === 'HKD') return 'HKD'
+  if (currency === 'CNY') return 'RMB'
+  return 'USD'
 }
 
 export default function CompanyPage() {
@@ -19,10 +26,12 @@ export default function CompanyPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const loadCompany = (t) => {
     setLoading(true)
     setError(null)
+    setRefreshing(false)
     fetchCompany(t)
       .then(res => setData(res.data))
       .catch(err => setError(err.response?.data?.detail || 'Failed to load company'))
@@ -33,9 +42,51 @@ export default function CompanyPage() {
     if (ticker) loadCompany(ticker)
   }, [ticker])
 
+  // Auto-refresh for China A-shares that haven't finished loading 10-year data yet.
+  // The backend fetches 10-year AKShare data in the background; poll until it's ready.
+  useEffect(() => {
+    if (!data || refreshing) return
+    const t = data.profile?.ticker
+    if (!t) return
+    const isChinaA = /^\d{6}\.S[SH]$/.test(t) || t.endsWith('.SS') || t.endsWith('.SZ')
+    if (!isChinaA) return
+
+    const maxYears = data.financial_table?.[0]?.values?.length || 0
+    if (maxYears >= 10) return
+
+    setRefreshing(true)
+    const interval = setInterval(() => {
+      fetchCompany(t)
+        .then(res => {
+          const years = res.data?.financial_table?.[0]?.values?.length || 0
+          if (years >= 10) {
+            setData(res.data)
+            setRefreshing(false)
+            clearInterval(interval)
+          }
+        })
+        .catch(() => {})
+    }, 5000)
+
+    // Stop after 3 minutes max
+    const stopTimer = setTimeout(() => {
+      clearInterval(interval)
+      setRefreshing(false)
+    }, 180000)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(stopTimer)
+    }
+  }, [data])
+
   const handleSearch = (newTicker) => {
     navigate(`/company/${newTicker}`)
   }
+
+  const isAsianStock = data?.profile?.exchange
+  const currency = data?.profile?.currency || 'USD'
+  const exchange = data?.profile?.exchange
 
   return (
     <div className="min-h-screen px-4 py-6">
@@ -53,8 +104,12 @@ export default function CompanyPage() {
         </div>
 
         {loading && (
-          <div className="text-center py-20 text-slate-400">
-            <div className="animate-pulse">Analyzing {ticker}...</div>
+          <div className="text-center py-20">
+            <div className="inline-block p-6 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-slate-300 font-medium mb-2">Warming up our financial data servers...</p>
+              <p className="text-slate-500 text-sm">This takes about 30 seconds. Thank you for your patience!</p>
+            </div>
           </div>
         )}
 
@@ -76,9 +131,19 @@ export default function CompanyPage() {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-400 mt-1">
                     <span className="font-mono text-blue-400">{data.profile.ticker}</span>
                     <span>•</span>
-                    <span>CIK: {data.profile.cik}</span>
-                    <span>•</span>
-                    <span className="capitalize">{data.profile.sector_bucket}</span>
+                    {isAsianStock ? (
+                      <>
+                        <span className="text-amber-400">{exchange}</span>
+                        <span>•</span>
+                        <span className="text-amber-400 font-medium">All figures in {getCurrencyLabel(currency)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>CIK: {data.profile.cik}</span>
+                        <span>•</span>
+                        <span className="capitalize">{data.profile.sector_bucket}</span>
+                      </>
+                    )}
                     {data.latest_filing_date && (
                       <>
                         <span>•</span>
@@ -88,7 +153,7 @@ export default function CompanyPage() {
                     {data.market_cap && (
                       <>
                         <span>•</span>
-                        <span className="text-emerald-400">Market Cap: {formatMarketCap(data.market_cap)}</span>
+                        <span className="text-emerald-400">Market Cap: {formatMarketCap(data.market_cap, currency)}</span>
                       </>
                     )}
                   </div>
@@ -100,9 +165,17 @@ export default function CompanyPage() {
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="w-5 h-5 text-emerald-400" />
                 <h2 className="text-xl font-semibold text-slate-100">Financials</h2>
-                <span className="text-sm text-slate-500 ml-2">Last 10 years</span>
+                <span className="text-sm text-slate-500 ml-2">
+                  {isAsianStock ? `Last 10 years (${getCurrencyLabel(currency)} millions)` : 'Last 10 years'}
+                </span>
+                {refreshing && (
+                  <span className="flex items-center gap-1.5 text-xs text-amber-400 ml-auto">
+                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+                    Loading more years… this may take 30 seconds or more
+                  </span>
+                )}
               </div>
-              <FinancialTable rows={data.financial_table} companyName={data.profile.name} ticker={data.profile.ticker} marketCap={data.market_cap} />
+              <FinancialTable rows={data.financial_table} companyName={data.profile.name} ticker={data.profile.ticker} marketCap={data.market_cap} currency={currency} />
             </div>
           </>
         )}

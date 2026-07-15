@@ -2,8 +2,11 @@ import { Printer } from 'lucide-react'
 
 const DISPLAY_YEARS = 10
 
-export default function FinancialTable({ rows, companyName, ticker, marketCap }) {
+export default function FinancialTable({ rows, companyName, ticker, marketCap, currency = 'USD' }) {
   if (!rows || rows.length === 0) return null
+
+  const currencySymbol = currency === 'HKD' ? 'HK$' : currency === 'CNY' ? 'RMB ' : '$'
+  const currencyLabel = currency === 'HKD' ? 'HKD' : currency === 'CNY' ? 'RMB' : 'USD'
 
   // Take the last 10 years (API returns ascending order)
   const allYears = rows[0].values.map(v => v.year)
@@ -16,17 +19,45 @@ export default function FinancialTable({ rows, companyName, ticker, marketCap })
     values: row.values.slice(startIdx),
   }))
 
-  const formatValue = (val) => {
+  const isAsianStock = currency === 'HKD' || currency === 'CNY'
+
+  // Metrics that should show whole numbers for HK/China stocks
+  const WHOLE_NUMBER_METRICS = [
+    'Weighted Avg Diluted Shares (M)',
+    'Revenue ($M)',
+    'Depreciation ($M)',
+    'Long-Term Debt ($M)',
+    'Property, Plant & Equipment ($M)',
+    'Inventory ($M)',
+  ]
+
+  // Percentage metrics that should show exactly one decimal place
+  const PERCENTAGE_METRICS = [
+    'Operating Margin (%)',
+    'Income Tax Rate (%)',
+    'Net Profit Margin (%)',
+    'Return on Capital (%)',
+  ]
+
+  const formatValue = (val, metricName) => {
     if (val === null || val === undefined) return '-'
+    // Percentage metrics: exactly one decimal place
+    if (PERCENTAGE_METRICS.includes(metricName)) {
+      return val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    }
+    // Remove decimals for specified HK/China metrics
+    if (isAsianStock && WHOLE_NUMBER_METRICS.includes(metricName)) {
+      return Math.round(val).toLocaleString()
+    }
     return val.toLocaleString(undefined, { maximumFractionDigits: 2 })
   }
 
   const formatMarketCapForPrint = (val) => {
     if (!val) return ''
-    if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`
-    if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`
-    if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`
-    return `$${val.toLocaleString()}`
+    if (val >= 1e12) return `${currencySymbol}${(val / 1e12).toFixed(2)}T`
+    if (val >= 1e9) return `${currencySymbol}${(val / 1e9).toFixed(2)}B`
+    if (val >= 1e6) return `${currencySymbol}${(val / 1e6).toFixed(2)}M`
+    return `${currencySymbol}${val.toLocaleString()}`
   }
 
   const handlePrint = () => {
@@ -40,7 +71,7 @@ export default function FinancialTable({ rows, companyName, ticker, marketCap })
     const bodyRows = displayRows.map((row, idx) => {
       const bg = idx % 2 === 0 ? '#fff' : '#f5f5f5'
       const cells = row.values.map(cell =>
-        `<td style="padding:3px 6px;border:1px solid #bbb;background:${bg};text-align:right;white-space:nowrap;">${formatValue(cell.value)}</td>`
+        `<td style="padding:3px 6px;border:1px solid #bbb;background:${bg};text-align:right;white-space:nowrap;">${formatValue(cell.value, row.metric_name)}</td>`
       ).join('')
       return `<tr>
         <td style="padding:3px 6px;border:1px solid #bbb;background:${bg};font-weight:500;text-align:left;white-space:nowrap;">${row.metric_name}</td>
@@ -63,7 +94,7 @@ export default function FinancialTable({ rows, companyName, ticker, marketCap })
 </head>
 <body>
   <h1>${companyName} (${ticker})</h1>
-  <p class="subtitle">Financial Summary — 10 Years — ${new Date().toLocaleDateString()}${marketCap ? ` — Market Cap: ${formatMarketCapForPrint(marketCap)}` : ''}</p>
+  <p class="subtitle">Financial Summary — 10 Years — ${new Date().toLocaleDateString()} — All figures in ${currencyLabel}${marketCap ? ` — Market Cap: ${formatMarketCapForPrint(marketCap)}` : ''}</p>
   <table>
     <thead><tr>
       <th style="padding:4px 6px;border:1px solid #999;background:#e8e8e8;font-weight:600;text-align:left;white-space:nowrap;">Metric</th>
@@ -94,16 +125,16 @@ export default function FinancialTable({ rows, companyName, ticker, marketCap })
         </button>
       </div>
 
-      {/* Screen table — 10 years, fits without horizontal scroll */}
-      <div className="rounded-xl border border-slate-700 overflow-hidden">
-        <table className="w-full border-collapse">
+      {/* Screen table — 10 years, scrollable on smaller screens */}
+      <div className="rounded-xl border border-slate-700 overflow-x-auto">
+        <table className="w-full min-w-[900px] border-collapse">
           <thead>
             <tr className="bg-slate-800/80">
-              <th className="text-left text-sm font-semibold text-slate-300 px-4 py-3 border-b border-slate-700">
+              <th className="text-left text-sm font-semibold text-slate-300 px-4 py-3 border-b border-slate-700 sticky left-0 bg-slate-800/80 z-10">
                 Metric
               </th>
               {years.map(year => (
-                <th key={year} className="text-right text-sm font-semibold text-slate-400 px-3 py-3 border-b border-slate-700 whitespace-nowrap">
+                <th key={year} className="text-right text-sm font-semibold text-slate-400 px-3 py-3 border-b border-slate-700 whitespace-nowrap min-w-[80px]">
                   {year}
                 </th>
               ))}
@@ -112,12 +143,12 @@ export default function FinancialTable({ rows, companyName, ticker, marketCap })
           <tbody>
             {displayRows.map((row, idx) => (
               <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-900' : 'bg-slate-900/60'}>
-                <td className="px-4 py-3 font-medium text-slate-200 border-b border-slate-800 text-sm whitespace-nowrap">
+                <td className="px-4 py-3 font-medium text-slate-200 border-b border-slate-800 text-sm whitespace-nowrap sticky left-0 bg-inherit z-10">
                   {row.metric_name}
                 </td>
                 {row.values.map((cell, i) => (
-                  <td key={i} className="text-right px-3 py-3 text-slate-300 border-b border-slate-800 whitespace-nowrap text-sm tabular-nums">
-                    {formatValue(cell.value)}
+                  <td key={i} className="text-right px-3 py-3 text-slate-300 border-b border-slate-800 whitespace-nowrap text-sm tabular-nums min-w-[80px]">
+                    {formatValue(cell.value, row.metric_name)}
                   </td>
                 ))}
               </tr>

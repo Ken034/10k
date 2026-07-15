@@ -113,6 +113,12 @@ TAGS = {
             "LoansReceivableNet",
             "LoansNet",
             "LoansAndLeases",
+            "LoansAndLeasesReceivableNetOfDeferredIncome",
+            "NotesReceivableGross",
+            "FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss",
+            "FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss",
+            "FinancingReceivableGross",
+            "FinancingReceivableNet",
         ],
         "net_interest_income": [
             "NetInterestIncome",
@@ -147,6 +153,12 @@ TAGS = {
             "LoansAndLeasesReceivableNet",
             "LoansReceivableNet",
             "LoansNet",
+            "LoansAndLeasesReceivableNetOfDeferredIncome",
+            "NotesReceivableGross",
+            "FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss",
+            "FinancingReceivableExcludingAccruedInterestAfterAllowanceForCreditLoss",
+            "FinancingReceivableGross",
+            "FinancingReceivableNet",
         ],
         "net_interest_income": ["NetInterestIncome"],
         "noninterest_income": ["NoninterestIncome"],
@@ -174,6 +186,16 @@ TAGS = {
 
 
 TAG_FALLBACKS: Dict[str, Dict[str, List[str]]] = {
+    "loans": {
+        "include": ["Loan", "FinancingReceivable", "NotesReceivable"],
+        "exclude": ["Payment", "Proceed", "Sale", "Purchase", "Origination",
+                     "Transfer", "Gain", "Loss", "Interest", "Securities",
+                     "Deferred", "Write", "Recovery", "Individually",
+                     "PurchaseCredit", "Disposal", "Fair", "Allowance",
+                     "Accumulated", "Collateral", "Offset", "Restriction"],
+        "exclude_starts": ["SecuritiesLoan"],
+        "prefer": ["Net", "Gross", "BeforeAllowance", "AfterAllowance"],
+    },
     "ppe": {
         "include": ["PropertyPlantAndEquipment"],
         # Tags excluded if they CONTAIN any of these

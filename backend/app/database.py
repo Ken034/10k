@@ -1,16 +1,32 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
+import re
+import ssl as _ssl
 
 from app.config import settings
 
-# SQLite async driver needs a longer timeout and WAL mode to avoid "database is locked"
-# errors when concurrent requests or the background scheduler write to the same file.
+# Configure engine based on database type
 _engine_kwargs = {"echo": False, "future": True}
-if settings.database_url.startswith("sqlite"):
-    _engine_kwargs["connect_args"] = {"timeout": 30.0}
+_db_url = settings.database_url
 
-engine = create_async_engine(settings.database_url, **_engine_kwargs)
+if _db_url.startswith("sqlite"):
+    # SQLite async driver needs a longer timeout and WAL mode
+    _engine_kwargs["connect_args"] = {"timeout": 30.0}
+elif _db_url.startswith("postgresql"):
+    # asyncpg doesn't accept sslmode in URL; strip it and pass SSL via connect_args
+    _clean_url = re.sub(r"[?&]sslmode=\w+", "", _db_url)
+    # Remove trailing ? or & if sslmode was the only query param
+    _clean_url = _clean_url.rstrip("?&")
+    if "sslmode" in _db_url:
+        _db_url = _clean_url
+        # Use ssl='require' for asyncpg (SSL without cert verification, suitable for Neon)
+        _engine_kwargs["connect_args"] = {"ssl": "require"}
+    _engine_kwargs["pool_size"] = 5
+    _engine_kwargs["max_overflow"] = 10
+    _engine_kwargs["pool_pre_ping"] = True
+
+engine = create_async_engine(_db_url, **_engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 Base = declarative_base()
@@ -34,7 +50,7 @@ async def init_db():
     if not settings.database_url.startswith("postgresql"):
         return
     async with AsyncSessionLocal() as session:
-        await session.execute(text(""""
+        await session.execute(text("""
             CREATE OR REPLACE VIEW financial_pivot AS
             SELECT
                 c.cik,
