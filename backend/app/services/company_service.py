@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.db_models import Company, FinancialMetric, Filing, LLMCache
@@ -70,15 +71,31 @@ async def fetch_and_cache_company(session: AsyncSession, ticker: str) -> Optiona
     sic = str(submissions.get("sic", "")) if submissions.get("sic") else None
     sector_bucket = classify_sector(sic)
 
-    company = Company(
-        cik=cik,
-        ticker=ticker.upper(),
-        name=company_info["name"],
-        sic=sic,
-        sector_bucket=sector_bucket,
-    )
-    session.add(company)
-    await session.flush()
+    # Check if a company with this CIK already exists (e.g. GOOG/GOOGL share same CIK)
+    result = await session.execute(select(Company).where(Company.cik == cik))
+    company = result.scalar_one_or_none()
+
+    if company is not None:
+        # Update existing company record (may have been inserted under a different ticker)
+        company.ticker = ticker.upper()
+        company.name = company_info["name"]
+        company.sic = sic
+        company.sector_bucket = sector_bucket
+        company.created_at = datetime.now(timezone.utc)
+        # Clean out old metrics/filings for refresh
+        await session.execute(FinancialMetric.__table__.delete().where(FinancialMetric.company_id == company.id))
+        await session.execute(Filing.__table__.delete().where(Filing.company_id == company.id))
+        await session.flush()
+    else:
+        company = Company(
+            cik=cik,
+            ticker=ticker.upper(),
+            name=company_info["name"],
+            sic=sic,
+            sector_bucket=sector_bucket,
+        )
+        session.add(company)
+        await session.flush()
 
     facts = await get_company_facts(cik)
     raw_metrics = await extract_raw_metrics(facts, sector_bucket, years=15)
@@ -148,14 +165,13 @@ async def get_company_detail(session: AsyncSession, ticker: str) -> Optional[Com
     company = result.scalar_one_or_none()
 
     if company is None or company.created_at is None or (datetime.now(timezone.utc) - company.created_at.replace(tzinfo=timezone.utc if company.created_at.tzinfo is None else company.created_at.tzinfo)) > timedelta(hours=24):
-        if company is not None:
-            # Delete old cached data to refresh
-            await session.execute(FinancialMetric.__table__.delete().where(FinancialMetric.company_id == company.id))
-            await session.execute(Filing.__table__.delete().where(Filing.company_id == company.id))
-            await session.execute(LLMCache.__table__.delete().where(LLMCache.company_id == company.id))
-            await session.delete(company)
-            await session.commit()
-        company = await fetch_and_cache_company(session, ticker)
+        try:
+            company = await fetch_and_cache_company(session, ticker)
+        except IntegrityError:
+            await session.rollback()
+            # Retry: another request may have inserted the same CIK concurrently
+            result = await session.execute(select(Company).where(Company.ticker == ticker))
+            company = result.scalar_one_or_none()
         if company is None:
             return None
 
