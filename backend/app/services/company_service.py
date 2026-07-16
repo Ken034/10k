@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,7 +147,7 @@ async def get_company_detail(session: AsyncSession, ticker: str) -> Optional[Com
     result = await session.execute(select(Company).where(Company.ticker == ticker))
     company = result.scalar_one_or_none()
 
-    if company is None or company.created_at is None or (datetime.utcnow() - company.created_at) > timedelta(hours=24):
+    if company is None or company.created_at is None or (datetime.now(timezone.utc) - company.created_at.replace(tzinfo=timezone.utc if company.created_at.tzinfo is None else company.created_at.tzinfo)) > timedelta(hours=24):
         if company is not None:
             # Delete old cached data to refresh
             await session.execute(FinancialMetric.__table__.delete().where(FinancialMetric.company_id == company.id))
