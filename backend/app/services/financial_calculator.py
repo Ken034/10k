@@ -58,6 +58,22 @@ def normalize_for_stock_splits(shares: Dict[int, Optional[float]]) -> Dict[int, 
     return normalized
 
 
+def _normalize_share_scale(shares: Dict[int, Optional[float]]) -> Dict[int, Optional[float]]:
+    """
+    Detect if shares are already reported in millions (e.g. MCD, UNH)
+    vs raw share counts. Normalizes per-year because companies may switch
+    reporting scale across years (e.g. MCD: raw shares before 2021, millions after).
+
+    Heuristic per value:
+    - < 100,000 → already in millions, multiply by 1M
+    - >= 100,000 → raw shares, no adjustment
+    """
+    return {
+        fy: v * MILLION if v is not None and 0 < v < 100_000 else v
+        for fy, v in shares.items()
+    }
+
+
 def build_regular_metrics(raw: Dict[str, Dict[int, Optional[float]]], years: int = 15) -> Dict[str, Dict[int, Optional[float]]]:
     current_year = max(raw["revenue"].keys()) if raw["revenue"] else 0
     fiscal_years = list(range(current_year - years + 1, current_year + 1))
@@ -77,6 +93,9 @@ def build_regular_metrics(raw: Dict[str, Dict[int, Optional[float]]], years: int
                 shares[fy] = ni / eps
             else:
                 shares[fy] = None
+
+    # Detect scale: some companies report shares in millions (MCD, UNH) vs raw counts
+    shares = _normalize_share_scale(shares)
 
     # Normalize for stock splits (e.g. AMZN 20:1 in 2022, AAPL 4:1 in 2020)
     shares = normalize_for_stock_splits(shares)
@@ -171,8 +190,9 @@ def build_banking_metrics(raw: Dict[str, Dict[int, Optional[float]]], years: int
     fiscal_years = list(range(current_year - years + 1, current_year + 1))
 
     metrics: Dict[str, Dict[int, Optional[float]]] = {}
-    # Shares: normalize for stock splits
+    # Shares: detect scale, then normalize for stock splits
     bank_shares = {fy: raw["shares_diluted"].get(fy) for fy in fiscal_years}
+    bank_shares = _normalize_share_scale(bank_shares)
     bank_shares = normalize_for_stock_splits(bank_shares)
     metrics["shares_outstanding"] = {fy: to_millions(bank_shares.get(fy)) for fy in fiscal_years}
     metrics["total_assets"] = {fy: to_millions(raw["assets"].get(fy)) for fy in fiscal_years}
