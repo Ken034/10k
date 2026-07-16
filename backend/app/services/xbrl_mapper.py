@@ -100,9 +100,12 @@ TAGS = {
             "WeightedAverageNumberOfDilutedSharesOutstanding",
             "WeightedAverageNumberOfShareOutstandingAssumingConversion",
             "WeightedAverageNumberOfSharesOutstandingBasic",
+            "AdjustedWeightedAverageShares",
         ],
         "eps_diluted": [
             "EarningsPerShareDiluted",
+            "DilutedEarningsLossPerShare",
+            "DilutedEarningsPerShare",
         ],
     },
     "banking": {
@@ -145,6 +148,7 @@ TAGS = {
         "shares_diluted": [
             "WeightedAverageNumberOfDilutedSharesOutstanding",
             "WeightedAverageNumberOfShareOutstandingAssumingConversion",
+            "AdjustedWeightedAverageShares",
         ],
     },
     "insurance": {
@@ -180,6 +184,7 @@ TAGS = {
         "shares_diluted": [
             "WeightedAverageNumberOfDilutedSharesOutstanding",
             "WeightedAverageNumberOfShareOutstandingAssumingConversion",
+            "AdjustedWeightedAverageShares",
         ],
     },
 }
@@ -468,5 +473,25 @@ async def extract_raw_metrics(facts: Dict[str, Any], sector_bucket: str, years: 
                 for fy in missing_years:
                     if result[metric_name].get(fy) is None and fallback.get(fy) is not None:
                         result[metric_name][fy] = fallback[fy]
+
+    # Adjust fiscal year range based on actual data availability.
+    # Companies with non-calendar fiscal years (e.g. VOD ending Mar 31) may have
+    # their latest data mapped to the prior CY frame, leaving the top year empty.
+    # Check revenue specifically (balance sheet items may exist in the top year
+    # from quarterly frames even when income statement data is absent).
+    revenue_data = result.get("revenue", {})
+    max_fy_with_revenue = 0
+    for fy, val in revenue_data.items():
+        if val is not None and fy > max_fy_with_revenue:
+            max_fy_with_revenue = fy
+
+    if max_fy_with_revenue > 0 and max_fy_with_revenue < fiscal_years[-1]:
+        # Latest year in our range has no revenue — shift range down by 1
+        # e.g. VOD: range(2011,2026) → range(2010,2025) so FY2025 is excluded
+        new_range = list(range(fiscal_years[0] - 1, fiscal_years[-1]))
+        adjusted = {}
+        for metric_name, metric_data in result.items():
+            adjusted[metric_name] = {fy: metric_data.get(fy) for fy in new_range}
+        result = adjusted
 
     return result
