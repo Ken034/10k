@@ -12,3 +12,4 @@ numpy==2.2.5
 aiosqlite==0.21.0
 psycopg[binary]==3.3.4
 yfinance>=0.2.40
+akshare>=1.14.0
