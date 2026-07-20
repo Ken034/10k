@@ -36,6 +36,11 @@ app.add_middleware(
 app.include_router(company.router)
 app.include_router(filings.router)
 
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
+
 # Serve React static files
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
 if os.path.isdir(static_dir):

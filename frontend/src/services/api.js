@@ -10,3 +10,8 @@ const api = axios.create({
 export const fetchCompany = (ticker) => api.get(`/company/${ticker}`)
 export const fetchRecentFilings = () => api.get('/filings/recent')
 export const searchCompanies = (query) => api.get(`/company/search?q=${encodeURIComponent(query)}`)
+
+// Fire-and-forget ping to wake up Render free-tier backend from sleep
+export const warmUpBackend = () => {
+  api.get('/health').catch(() => {})
+}

@@ -1,9 +1,16 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail } from 'lucide-react'
 import SearchBar from '../components/SearchBar'
+import { warmUpBackend } from '../services/api'
 
 export default function LandingPage() {
   const navigate = useNavigate()
+
+  // Wake up backend immediately so it's ready when user searches
+  useEffect(() => {
+    warmUpBackend()
+  }, [])
 
   const handleSearch = (ticker) => {
     navigate(`/company/${ticker}`)
