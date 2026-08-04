@@ -314,20 +314,45 @@ def _is_annual_entry(entry: Dict[str, Any]) -> bool:
 
 
 def _entry_fiscal_year(entry: Dict[str, Any]) -> Optional[int]:
-    """Determine the fiscal year the data belongs to."""
+    """Determine the fiscal year the data belongs to.
+    
+    For companies with non-calendar fiscal years (e.g. VOD ending Mar 31),
+    the CY frame may lag behind the actual fiscal year when the period
+    ends in Q1 of the next calendar year.
+    """
+    import re
     frame = entry.get("frame") or ""
     # Frame like CY2017, FY2017, CY2017Q4, CY2017Q4I
-    import re
     m = re.search(r"(?:CY|FY)(\d{4})", frame)
-    if m:
-        return int(m.group(1))
+    if not m:
+        # No frame — fall back to end date year
+        end = entry.get("end")
+        if end:
+            try:
+                return datetime.strptime(end, "%Y-%m-%d").year
+            except ValueError:
+                pass
+        return None
+    
+    frame_year = int(m.group(1))
+    
+    # Detect non-calendar fiscal year offset:
+    # If the period ends in Jan-Mar of the year AFTER the frame year,
+    # the actual fiscal year is frame_year + 1.
+    # Example: frame=CY2025, end=2026-03-31 → FY is 2026, not 2025.
     end = entry.get("end")
     if end:
         try:
-            return datetime.strptime(end, "%Y-%m-%d").year
+            end_dt = datetime.strptime(end, "%Y-%m-%d")
+            end_month = end_dt.month
+            end_year = end_dt.year
+            # Period ends in Q1 (Jan-Mar) and end year > frame year
+            if end_month <= 3 and end_year == frame_year + 1:
+                return frame_year + 1
         except ValueError:
             pass
-    return None
+    
+    return frame_year
 
 
 def _pick_annual_entry(entries: List[Dict[str, Any]], fiscal_year: int) -> Optional[Dict[str, Any]]:
@@ -445,7 +470,9 @@ async def _extract_metric(facts: Dict[str, Any], tag_candidates: List[str], fisc
 
 async def extract_raw_metrics(facts: Dict[str, Any], sector_bucket: str, years: int = 15) -> Dict[str, Dict[int, Optional[float]]]:
     current_year = datetime.now().year
-    fiscal_years = list(range(current_year - years, current_year))
+    # Include current year to capture filings for non-calendar FY companies
+    # (e.g. VOD FY2026 ends Mar 2026 but is filed in 2026)
+    fiscal_years = list(range(current_year - years, current_year + 1))
 
     tags = TAGS.get(sector_bucket, TAGS["regular"])
     unit_preferences = ["USD", "USD/shares"]
