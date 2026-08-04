@@ -20,3 +20,4 @@ frontend/dist/
 *.log
 .DS_Store
 .vic_state/
+.vercel-tmp/
