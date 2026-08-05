@@ -501,24 +501,25 @@ async def extract_raw_metrics(facts: Dict[str, Any], sector_bucket: str, years: 
                     if result[metric_name].get(fy) is None and fallback.get(fy) is not None:
                         result[metric_name][fy] = fallback[fy]
 
-    # Adjust fiscal year range based on actual data availability.
-    # Companies with non-calendar fiscal years (e.g. VOD ending Mar 31) may have
-    # their latest data mapped to the prior CY frame, leaving the top year empty.
-    # Check revenue specifically (balance sheet items may exist in the top year
-    # from quarterly frames even when income statement data is absent).
+    # Trim trailing years with no data from the right edge.
+    # This handles both calendar and non-calendar FY companies:
+    # - Calendar FY (e.g. AAPL): if current year data isn't filed yet, trim it
+    # - Non-calendar FY (e.g. VOD ending Mar 31): correctly-mapped FY data is kept,
+    #   only years beyond the latest available data are removed.
+    # We check revenue specifically (income statement) since balance sheet items
+    # may exist in a year even when flow data is absent.
     revenue_data = result.get("revenue", {})
-    max_fy_with_revenue = 0
+    max_fy_with_data = 0
     for fy, val in revenue_data.items():
-        if val is not None and fy > max_fy_with_revenue:
-            max_fy_with_revenue = fy
+        if val is not None and fy > max_fy_with_data:
+            max_fy_with_data = fy
 
-    if max_fy_with_revenue > 0 and max_fy_with_revenue < fiscal_years[-1]:
-        # Latest year in our range has no revenue — shift range down by 1
-        # e.g. VOD: range(2011,2026) → range(2010,2025) so FY2025 is excluded
-        new_range = list(range(fiscal_years[0] - 1, fiscal_years[-1]))
-        adjusted = {}
+    if max_fy_with_data > 0 and max_fy_with_data < fiscal_years[-1]:
+        # Trim years beyond the latest data point
+        trimmed_years = [fy for fy in fiscal_years if fy <= max_fy_with_data]
+        trimmed = {}
         for metric_name, metric_data in result.items():
-            adjusted[metric_name] = {fy: metric_data.get(fy) for fy in new_range}
-        result = adjusted
+            trimmed[metric_name] = {fy: metric_data.get(fy) for fy in trimmed_years}
+        result = trimmed
 
     return result
